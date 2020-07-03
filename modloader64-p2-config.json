@@ -1,0 +1,27 @@
+{
+  "ModLoader64": {
+    "rom": "yukeyuke.z64",
+    "patch": "",
+    "isServer": false,
+    "isClient": false,
+    "isAnalyticsServer": false,
+    "supportedConsoles": [
+      "N64"
+    ],
+    "selectedConsole": "N64",
+    "coreOverride": ""
+  },
+  "NetworkEngine.Server": {
+    "port": 12400,
+    "udpPort": 12400
+  },
+  "NetworkEngine.Client": {
+    "isSinglePlayer": false,
+    "forceServerOverride": false,
+    "ip": "127.0.0.1",
+    "port": 12400,
+    "lobby": "yukeyuke",
+    "nickname": "Drahsid",
+    "password": ""
+  }
+}

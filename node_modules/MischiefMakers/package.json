@@ -1,0 +1,10 @@
+{
+    "name": "MischiefMakers",
+    "version": "0.0.1",
+    "description": "",
+    "main": "MischiefMakers.js",
+    "author": "Drahsid",
+    "credits": "",
+    "license": "GPL3",
+    "core": "MischiefMakers"
+}
