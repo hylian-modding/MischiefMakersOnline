@@ -260,7 +260,7 @@ class MischiefMakersClient {
             let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
             if (player_puppet != null) {
                 this.ModLoader.logger.info(packet.player.uuid + "\'s data update [mmo_sPData]")
-                player_puppet.actor.mode = packet.mode
+                //player_puppet.actor.mode = packet.mode
                 player_puppet.actor.flags_0 = packet.flags_0
                 player_puppet.actor.effect_flags = packet.effect_flags
                 player_puppet.actor.flags_1 = packet.flags_1

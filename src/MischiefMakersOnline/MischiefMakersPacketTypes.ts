@@ -68,7 +68,7 @@ export class UpdatePlayerRGBAPacket extends Packet {
 }
 
 export class UpdatePlayerDataPacket extends Packet {
-    mode: number
+    //mode: number
     flags_0: number
     effect_flags: number
     flags_1: number
@@ -80,7 +80,7 @@ export class UpdatePlayerDataPacket extends Packet {
 
     constructor(lhs: Actor, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}PData`, "mmo", lobby, false)
-        this.mode = lhs.mode
+        //this.mode = lhs.mode
         this.flags_0 = lhs.flags_0
         this.effect_flags = lhs.effect_flags
         this.flags_1 = lhs.flags_1
