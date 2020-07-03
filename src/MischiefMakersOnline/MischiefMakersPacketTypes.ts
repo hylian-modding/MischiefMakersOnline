@@ -68,27 +68,17 @@ export class UpdatePlayerRGBAPacket extends Packet {
 }
 
 export class UpdatePlayerDataPacket extends Packet {
-    //mode: number
-    flags_0: number
     effect_flags: number
-    flags_1: number
     health: number
     air_ground_state: number
     idle_time: number
-    anim_flags: number
-    //flags_2: number
 
     constructor(lhs: Actor, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}PData`, "mmo", lobby, false)
-        //this.mode = lhs.mode
-        this.flags_0 = lhs.flags_0
         this.effect_flags = lhs.effect_flags
-        this.flags_1 = lhs.flags_1
         this.health = lhs.health
         this.air_ground_state = lhs.air_ground_state
         this.idle_time = lhs.idle_time
-        this.anim_flags = lhs.anim_flags
-        //this.flags_2 = lhs.flags_2
     }
 }
 

@@ -86,7 +86,7 @@ class MischiefMakersClient {
                 packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
                 if (this.core.marina.velocity.magnitude() != 0) packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
             }
-            else if (frame % 6 == 0) {
+            if (frame % 6 == 0) {
                 packets.push(new UpdatePlayerDataPacket(this.core.marina as unknown as Actor, this.ModLoader.clientLobby))
             }
 
@@ -182,7 +182,11 @@ class MischiefMakersClient {
 
                 // Extrapolate puppet positions, save the network!
                 let lv = new Vector2(this.puppet_overlord.puppets[i].last_vel.x, this.puppet_overlord.puppets[i].last_vel.y)
-                if (lv.magnitude() != 0) {
+                if (lv.magnitude() == 0) {
+                    this.puppet_overlord.puppets[i].actor.pos_2 = new Vector3(this.puppet_overlord.puppets[i].last_pos.x - this.core.marina.camera_pos_final.x, this.puppet_overlord.puppets[i].last_pos.y - this.core.marina.camera_pos_final.y, 0);
+                    this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
+                }
+                else {
                     extrap_pos = new Vector3(
                         this.puppet_overlord.puppets[i].last_pos.x + (lv.x * (frame - this.puppet_overlord.puppets[i].last_update)),
                         this.puppet_overlord.puppets[i].last_pos.y + (lv.y * (frame - this.puppet_overlord.puppets[i].last_update)),
@@ -258,16 +262,10 @@ class MischiefMakersClient {
     onPlayerData(packet: UpdatePlayerDataPacket) {
         if (packet.player.uuid != this.ModLoader.me.uuid) {
             let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-            if (player_puppet != null) {
-                this.ModLoader.logger.info(packet.player.uuid + "\'s data update [mmo_sPData]")
-                //player_puppet.actor.mode = packet.mode
-                player_puppet.actor.flags_0 = packet.flags_0
+            if (player_puppet) {
                 player_puppet.actor.effect_flags = packet.effect_flags
-                player_puppet.actor.flags_1 = packet.flags_1
                 player_puppet.actor.air_ground_state = packet.air_ground_state
                 player_puppet.actor.idle_time = packet.idle_time
-                player_puppet.actor.anim_flags = packet.anim_flags
-                //player_puppet.actor.flags_2 = packet.flags_2
             }
         }
     }

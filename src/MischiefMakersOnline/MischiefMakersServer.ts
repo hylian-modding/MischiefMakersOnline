@@ -135,7 +135,6 @@ class MischiefMakersServer {
     onUpdatePlayerDataServer(packet: UpdatePlayerDataPacket) {
         packet.packet_id = "mmo_sPData"
         this.sendPacketToPlayersInScene(packet);
-        this.ModLoader.logger.info("got mmo_cPData")
     }
 
 

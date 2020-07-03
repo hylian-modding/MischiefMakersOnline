@@ -66,9 +66,9 @@ export class PuppetOverlord {
             // Copy and paste the player actor
             copy_data = this.ModLoader.emulator.rdramReadBuffer(ACTOR_LIST_POINTER, SIZEOF_ACTOR)
             this.ModLoader.emulator.rdramWriteBuffer(ACTOR_LIST_POINTER + i, copy_data)
-            //0x0E, 0x0F, 0x18, 0x21, 0x2F, 0x56, 0x60, 0x61
-            this.puppets[free_slot].actor.status = 0x0004
-            this.puppets[free_slot].actor.type = 0x0016
+            //0x0E, 0x0F, 0x21, 0x60, 0x61
+            this.puppets[free_slot].actor.status = 0x0000
+            this.puppets[free_slot].actor.type = 0x0060
             this.puppets[free_slot].actor.rgba = 0x082008D0
 
             return 1
