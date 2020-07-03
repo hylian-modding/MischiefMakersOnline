@@ -270,6 +270,9 @@ class MischiefMakersClient {
                 player_puppet.actor.effect_flags = packet.effect_flags
                 player_puppet.actor.air_ground_state = packet.air_ground_state
                 player_puppet.actor.idle_time = packet.idle_time
+                player_puppet.actor.scaleXY = packet.scaleXY
+                player_puppet.actor.scale_0 = packet.scale_0
+                player_puppet.actor.scale_1 = packet.scale_1
             }
         }
     }

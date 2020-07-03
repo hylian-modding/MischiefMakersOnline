@@ -72,6 +72,10 @@ export class UpdatePlayerDataPacket extends Packet {
     health: number
     air_ground_state: number
     idle_time: number
+    scaleXY: number
+    scale_0: Vector2
+    scale_1: Vector2
+    
 
     constructor(lhs: Actor, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}PData`, "mmo", lobby, false)
@@ -79,6 +83,9 @@ export class UpdatePlayerDataPacket extends Packet {
         this.health = lhs.health
         this.air_ground_state = lhs.air_ground_state
         this.idle_time = lhs.idle_time
+        this.scaleXY = lhs.scaleXY
+        this.scale_0 = lhs.scale_0
+        this.scale_1 = lhs.scale_1
     }
 }
 
