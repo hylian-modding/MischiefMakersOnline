@@ -193,7 +193,11 @@ class MischiefMakersClient {
                         0
                     )
                     delta_pos = new Vector3(extrap_pos.x - this.core.marina.camera_pos_final.x, extrap_pos.y - this.core.marina.camera_pos_final.y, 0);
+                    this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos
                     this.puppet_overlord.puppets[i].actor.pos_2 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_3 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_4 = delta_pos
                     this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
                 }
             }
