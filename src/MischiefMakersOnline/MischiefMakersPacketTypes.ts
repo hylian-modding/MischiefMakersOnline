@@ -89,3 +89,22 @@ export class UpdatePlayerDataPacket extends Packet {
     }
 }
 
+export class PingServerPacket extends Packet {
+    time_sent: Date
+
+    constructor(tick: Date, lobby: string, is_server: number = 0) {
+        super(`mmo_${(is_server) ? 's' : 'c'}Ping`, "mmo", lobby, false)
+        this.time_sent = tick;
+    }
+}
+
+export class PlayerPingPacket extends Packet {
+    ping: number
+
+    constructor(ping: number, lobby: string, is_server: number = 0) {
+        super(`mmo_${(is_server) ? 's' : 'c'}PPing`, "mmo", lobby, false)
+        this.ping = ping
+    }
+}
+
+

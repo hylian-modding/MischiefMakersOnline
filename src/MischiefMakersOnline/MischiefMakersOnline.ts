@@ -39,7 +39,7 @@ export class MischiefMakersOnline implements IPlugin, IPluginServerConfig {
     onClient_InjectFinished(evt: any) {}
 
     getServerURL(): string {
-        return "192.99.70.23:8030";
+        return "192.99.70.23:8030"
     }
 }
 

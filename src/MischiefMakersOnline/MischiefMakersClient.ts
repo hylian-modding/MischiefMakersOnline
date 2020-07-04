@@ -6,9 +6,9 @@ import { Init, Preinit, Postinit, onTick } from 'modloader64_api/PluginLifecycle
 import { IModLoaderAPI, ModLoaderEvents } from 'modloader64_api/IModLoaderAPI';
 import { ModLoaderAPIInject } from 'modloader64_api/ModLoaderAPIInjector';
 import { Player, Actor, ACTOR_LIST_POINTER } from './Core/MischiefMakers/API/IActor';
-import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket } from './MischiefMakersPacketTypes';
+import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, PlayerPingPacket } from './MischiefMakersPacketTypes';
 import { Save } from './Core/MischiefMakers/API/ISave';
-import PuppetOverlord, { Puppet, ACTOR_LIST_NUM_GENERATED } from './MischiefMakersPuppet';
+import { PuppetOverlord, Puppet } from './MischiefMakersPuppet';
 import { Game } from './Core/MischiefMakers/API/IGame';
 import Vector3 from 'modloader64_api/math/Vector3';
 import Vector2 from './Core/MischiefMakers/Math/Vector2';
@@ -25,6 +25,7 @@ class MischiefMakersClient {
     last_velocity!: Vector2
 
     last_frame!: number
+    last_ping!: number
 
     core: MischiefMakers
 
@@ -50,6 +51,7 @@ class MischiefMakersClient {
         this.last_best_times = Buffer.alloc(0x90)
         this.last_velocity = new Vector2()
         this.last_frame = 0
+        this.last_ping = 0
 
         this.puppet_overlord = new PuppetOverlord(this.ModLoader)
 
@@ -79,7 +81,7 @@ class MischiefMakersClient {
             this.last_best_times = this.core.save.best_times
         }
 
-        if (!this.core.game.in_cutscene && !this.core.game.is_paused) {
+        if (this.arePuppetsSafe()) {
             if (frame % 3 == 0) {
 
                 // If moving, update position, update velocity on change
@@ -93,6 +95,7 @@ class MischiefMakersClient {
                 // Every second, update pos and vel
                 packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
                 packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+                packets.push(new PingServerPacket(new Date(), this.ModLoader.clientLobby))
             }
 
             // Instantly update if changed direction or stopped/started moving
@@ -118,102 +121,38 @@ class MischiefMakersClient {
                 packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
             }
         }
-        else if (this.core.game.in_cutscene || this.core.game.is_paused) {
+        else if (this.puppet_overlord.puppets.length > 0) {
             this.puppet_overlord.freeAllPuppets()
         }
 
-        let delta_pos, extrap_pos, lv
-        for (i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
-            if (this.puppet_overlord.puppets[i].in_use && this.puppet_overlord.puppets[i].actor.health > 0) {
-
-                // An idea to turn the player into Teran and guess animations omegalul
-                // Quick Logic doesn't work, will have to actually consider how this should function
-                /*if (frame % 5 == 0) {
-                    // Update and guess sprite
-                    this.puppet_overlord.puppets[i].actor.current_sprite = 0x68
-                    this.puppet_overlord.puppets[i].actor.mode = 0x00011103
-                    this.puppet_overlord.puppets[i].actor.current_sprite_index++
-
-                    // Grounded, probably idle
-                    if (this.puppet_overlord.puppets[i].actor.air_ground_state == 0 || this.puppet_overlord.puppets[i].actor.air_ground_state == 7) {
-                        this.puppet_overlord.puppets[i].actor.idle_time += 1
-                        this.puppet_overlord.puppets[i].actor.current_sprite_index = this.puppet_overlord.puppets[i].actor.idle_time % 3
-                        if (this.puppet_overlord.puppets[i].actor.idle_time > 240) {
-                            this.puppet_overlord.puppets[i].actor.current_sprite_index = 0xE1 + (this.puppet_overlord.puppets[i].actor.idle_time % 9)
-                        }
-                    }
-                    // In the air
-                    if (this.puppet_overlord.puppets[i].actor.air_ground_state == 4) {
-                        // The player probably jumped
-                        if (this.puppet_overlord.puppets[i].actor.flags_2 != 0) {
-                            if (this.puppet_overlord.puppets[i].actor.current_sprite_index < 0x2C || this.puppet_overlord.puppets[i].actor.current_sprite_index > 0x38) {
-                                this.puppet_overlord.puppets[i].actor.current_sprite_index = 0x2C
-                            }
-                        }
-                        // Freefall
-                        else {
-                            this.puppet_overlord.puppets[i].actor.current_sprite_index = 0x38
-                        }
-                    }
-
-                    // Ducking
-                    if ((this.puppet_overlord.puppets[i].actor.anim_flags & 0x00000003) == 0) { // Could probably just use this to tell us what animation to play
-                        if (this.puppet_overlord.puppets[i].actor.current_sprite_index < 0xAA || this.puppet_overlord.puppets[i].actor.current_sprite_index > 0xAC) {
-                            this.puppet_overlord.puppets[i].actor.current_sprite_index = 0xAA
-                        }
-                    }
-
-                    // Running
-                    if ((this.puppet_overlord.puppets[i].actor.anim_flags & 0x0000001D) == 0) {
-                        if (this.puppet_overlord.puppets[i].actor.current_sprite_index < 0x81 || this.puppet_overlord.puppets[i].actor.current_sprite_index > 0x90) {
-                            this.puppet_overlord.puppets[i].actor.current_sprite_index = 0x81
-                        }
-                    }
-
-                    // Rolling
-                    if ((this.puppet_overlord.puppets[i].actor.anim_flags & 0x00000063) == 0) {
-                        if (this.puppet_overlord.puppets[i].actor.current_sprite_index < 0x38 || this.puppet_overlord.puppets[i].actor.current_sprite_index > 0x40) {
-                            this.puppet_overlord.puppets[i].actor.current_sprite_index = 0x38
-                        }
-                    }
-
-                    // Ooh-ouch!
-                    if ((this.puppet_overlord.puppets[i].actor.anim_flags & 0x00000092) == 0 || (this.puppet_overlord.puppets[i].actor.anim_flags & 0x00000093) != 0) {
-                        if (this.puppet_overlord.puppets[i].actor.current_sprite_index < 0x52 || this.puppet_overlord.puppets[i].actor.current_sprite_index > 0x5C) {
-                            this.puppet_overlord.puppets[i].actor.current_sprite_index = 0x52
-                        }
-                    }
-                }*/
-
-                // Extrapolate puppet positions, save the network!
-                lv = new Vector2(this.puppet_overlord.puppets[i].last_vel.x, this.puppet_overlord.puppets[i].last_vel.y)
-                if (lv.magnitude() == 0) {
-                    delta_pos = new Vector3(this.puppet_overlord.puppets[i].last_pos.x - this.core.marina.camera_pos_final.x, this.puppet_overlord.puppets[i].last_pos.y - this.core.marina.camera_pos_final.y, 0);
-                    this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_2 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_3 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_4 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
-                }
-                else {
-                    extrap_pos = new Vector3(
-                        this.puppet_overlord.puppets[i].last_pos.x + (lv.x * (frame - this.puppet_overlord.puppets[i].last_update)),
-                        this.puppet_overlord.puppets[i].last_pos.y + (lv.y * (frame - this.puppet_overlord.puppets[i].last_update)),
-                        0
-                    )
-
-                    delta_pos = new Vector3(extrap_pos.x - this.core.marina.camera_pos_final.x, extrap_pos.y - this.core.marina.camera_pos_final.y, 0);
-                    this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_2 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_3 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.pos_4 = delta_pos
-                    this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
-                }
+        let delta_pos, extrap_pos, latency_frames, lv
+        for (i = 0; i < this.puppet_overlord.puppets.length; i++) {
+            // Extrapolate puppet positions, save the network!
+            lv = new Vector2(this.puppet_overlord.puppets[i].last_vel.x, this.puppet_overlord.puppets[i].last_vel.y)
+            if (lv.magnitude() == 0) {
+                delta_pos = new Vector3(this.puppet_overlord.puppets[i].last_pos.x - this.core.marina.camera_pos_final.x, this.puppet_overlord.puppets[i].last_pos.y - this.core.marina.camera_pos_final.y, 0);
+                this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_2 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_3 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_4 = delta_pos
+                this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
             }
-            else if (this.puppet_overlord.puppets[i].in_use && this.puppet_overlord.puppets[i].actor.health <= 0) {
-                this.puppet_overlord.freePuppet(this.puppet_overlord.puppets[i].uuid)
+            else {
+                latency_frames = Math.round((this.puppet_overlord.puppets[i].getAveragePing() * 1000) / 16)
+                extrap_pos = new Vector3(
+                    this.puppet_overlord.puppets[i].last_pos.x + (lv.x * ((frame - this.puppet_overlord.puppets[i].last_update) + latency_frames)),
+                    this.puppet_overlord.puppets[i].last_pos.y + (lv.y * ((frame - this.puppet_overlord.puppets[i].last_update) + latency_frames)),
+                    0
+                )
+
+                delta_pos = new Vector3(extrap_pos.x - this.core.marina.camera_pos_final.x, extrap_pos.y - this.core.marina.camera_pos_final.y, 0);
+                this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_2 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_3 = delta_pos
+                this.puppet_overlord.puppets[i].actor.pos_4 = delta_pos
+                this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
             }
         }
 
@@ -226,6 +165,16 @@ class MischiefMakersClient {
         this.last_frame = frame
     }
 
+    arePuppetsSafe(): boolean {
+        return (!this.core.game.in_cutscene && !this.core.game.is_paused && this.core.game.game_state == 6)
+    }
+
+    arePuppetsUnsafe(): boolean {
+        return (this.core.game.in_cutscene != 0 || this.core.game.is_paused != 0 || this.core.game.game_state != 6)
+    }
+
+
+    // TODO: move if uuid == uuid to server side
     @NetworkHandler('mmo_sGold')
     onGoldGemsPacket(packet: GoldGemsPacket) {
         this.core.save.gold_gems = packet.gold_gems
@@ -249,45 +198,53 @@ class MischiefMakersClient {
 
     @NetworkHandler('mmo_sPos')
     onPosPacket(packet: UpdatePlayerPositionPacket) {
-        if (packet.player.uuid != this.ModLoader.me.uuid) {
-            let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-            if (player_puppet) {
-                player_puppet.last_pos = packet.pos
-                player_puppet.last_update = this.last_frame
-            }
+        let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
+        if (player_puppet) {
+            player_puppet.last_pos = packet.pos
+            player_puppet.last_update = this.last_frame
         }
     }
 
     @NetworkHandler('mmo_sVel')
     onVelPacket(packet: UpdatePlayerVelocityPacket) {
-        if (packet.player.uuid != this.ModLoader.me.uuid) {
-            let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-            if (player_puppet) {
-                player_puppet.last_vel = packet.vel
-                player_puppet.last_update = this.last_frame
-            }
+        let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
+        if (player_puppet) {
+            player_puppet.last_vel = packet.vel
+            player_puppet.last_update = this.last_frame
         }
     }
 
     @NetworkHandler('mmo_sPData')
     onPlayerData(packet: UpdatePlayerDataPacket) {
-        if (packet.player.uuid != this.ModLoader.me.uuid) {
-            let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-            if (player_puppet) {
-                player_puppet.actor.effect_flags = packet.effect_flags
-                player_puppet.actor.air_ground_state = packet.air_ground_state
-                player_puppet.actor.idle_time = packet.idle_time
-                player_puppet.actor.scaleXY = packet.scaleXY
-                player_puppet.actor.scale_0 = packet.scale_0
-                player_puppet.actor.scale_1 = packet.scale_1
-            }
-            else {
-                if (!this.core.game.in_cutscene && !this.core.game.is_paused) {
-                    let result = this.puppet_overlord.addPuppet(packet.player.uuid)
-                    this.ModLoader.logger.warn("Trying to make puppet for " + packet.player.uuid + "... " + `${(result) ? 'success' : 'fail'}`)
-                }
+        let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
+        if (player_puppet) {
+            player_puppet.actor.effect_flags = packet.effect_flags
+            player_puppet.actor.air_ground_state = packet.air_ground_state
+            player_puppet.actor.idle_time = packet.idle_time
+            player_puppet.actor.scaleXY = packet.scaleXY
+            player_puppet.actor.scale_0 = packet.scale_0
+            player_puppet.actor.scale_1 = packet.scale_1
+        }
+        else {
+            if (this.arePuppetsSafe()) {
+                let result = this.puppet_overlord.addPuppet(packet.player.uuid)
+                this.ModLoader.logger.warn("Trying to make puppet for " + packet.player.uuid + "... " + `${(result) ? 'success' : 'fail'}`)
             }
         }
+    }
+
+    @NetworkHandler('mmo_sPing')
+    onPing(packet: PingServerPacket) {
+        let time = new Date()
+        this.last_ping = (time.valueOf() - packet.time_sent.valueOf()) / 1000
+        this.ModLoader.clientSide.sendPacket(new PlayerPingPacket(this.last_ping, this.ModLoader.clientLobby))
+        this.ModLoader.logger.debug("Ping: " + this.last_ping.toString())
+    }
+
+    @NetworkHandler('mmo_sPPing')
+    onPlayerPing(packet: PlayerPingPacket) {
+        let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
+        if (player_puppet) player_puppet.pushNewPing(packet.ping)     
     }
 }
 

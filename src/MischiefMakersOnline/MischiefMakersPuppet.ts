@@ -9,25 +9,43 @@ import Vector2 from './Math/Vector2';
  * Is this safe? Unlikely lul
  * Gotta find the method that generates these safely
 */
-export const ACTOR_LIST_STACK_OFFSET: number = SIZEOF_ACTOR * 1
-export const ACTOR_LIST_NUM_GENERATED: number = 8
 export const ACTOR_LIST_SIZE: number = 0xC0
 
+
 export class Puppet {
-    in_use = 0
     uuid: string = ""
+    user_ping: number[] = new Array(32);
+    index: number = -1
     last_pos: Vector2 = new Vector2()
     last_vel: Vector2 = new Vector2()
     last_update: number = 0
+    
     actor!: Actor
 
-    constructor(emu: IMemory, actor_index = 0, uuid: string = "") {
-        this.in_use = 0;
+    constructor(emu: IMemory, actor_index: number = -1, uuid: string = "") {
         this.uuid = uuid;
         this.last_pos = new Vector2()
         this.last_vel = new Vector2()
+        this.index = actor_index
+        this.actor = new Actor(emu, actor_index)
+        for (let i = 0; i < this.user_ping.length; i++) {
+            this.user_ping[i] = 0
+        }
+    }
 
-        if (actor_index != 0) this.actor = new Actor(emu, actor_index)
+    getAveragePing(): number {
+        let total = 0
+
+        for (let i = 0; i < this.user_ping.length; i++) {
+            total += this.user_ping[i]
+        }
+
+        return total / this.user_ping.length
+    }
+
+    pushNewPing(ms: number) {
+        this.user_ping.splice(0)
+        this.user_ping.push(ms)
     }
 }
 
@@ -38,44 +56,46 @@ export class PuppetOverlord {
 
     constructor(ModLoader: IModLoaderAPI) {
         this.ModLoader = ModLoader
-        this.puppets = new Array(ACTOR_LIST_NUM_GENERATED)
-
-        for (let i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
-            this.puppets[i] = new Puppet(ModLoader.emulator)
-        }
+        this.puppets = []
     }
 
     addPuppet(uuid: string) {
         let i
-        let no_puppet = 1
-        let free_slot = -1
         let copy_data = Buffer.alloc(SIZEOF_ACTOR)
+        let free_slot = 0
+        let actor: Actor
 
-        for (i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
-            if (this.puppets[i].in_use != 1) free_slot = i
-            if (this.puppets[i].uuid == uuid) {
-                no_puppet = 0
+        for (i = 0; i < this.puppets.length; i++) {
+            if (this.puppets[i].uuid == uuid) return free_slot
+        }
+
+        for (i = 1; i < ACTOR_LIST_SIZE; i++) {
+            actor = new Actor(this.ModLoader.emulator, i);
+            if ((actor.mode & 2) == 0) {
+                free_slot = i
+                this.ModLoader.logger.info("Found free slot at " + i.toString())
                 break
             }
         }
 
-        if (no_puppet && free_slot != -1) {
-            i = ACTOR_LIST_STACK_OFFSET + (SIZEOF_ACTOR * free_slot)
-            this.puppets[free_slot] = new Puppet(this.ModLoader.emulator, i / SIZEOF_ACTOR, uuid)
-            this.puppets[free_slot].in_use = 1
+        if (free_slot > 0) {
+            i = ACTOR_LIST_POINTER + (SIZEOF_ACTOR * free_slot)
+
+            this.puppets.push(new Puppet(this.ModLoader.emulator, free_slot, uuid))
 
             // Copy and paste the player actor
             copy_data = this.ModLoader.emulator.rdramReadBuffer(ACTOR_LIST_POINTER, SIZEOF_ACTOR)
-            this.ModLoader.emulator.rdramWriteBuffer(ACTOR_LIST_POINTER + i, copy_data)
+            this.ModLoader.emulator.rdramWriteBuffer(i, copy_data)
+            
             //0x0E, 0x0F, 0x21, 0x60, 0x61
-            this.puppets[free_slot].actor.status = 0x0000
-            this.puppets[free_slot].actor.type = 0x0060
-            this.puppets[free_slot].actor.rgba = 0x082008D0
+            this.puppets[this.puppets.length - 1].actor.status = 0x0000
+            this.puppets[this.puppets.length - 1].actor.type = 0x0060
+            this.puppets[this.puppets.length - 1].actor.rgba = 0x010801D0
 
-            return 1
+            return free_slot
         }
 
-        return 0
+        return free_slot
     }
 
     freePuppet(uuid: string) {
@@ -83,12 +103,12 @@ export class PuppetOverlord {
         let actor_offset
         let copy_data = Buffer.alloc(SIZEOF_ACTOR, 0)
 
-        for (i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
+        for (i = 0; i < this.puppets.length; i++) {
             if (this.puppets[i].uuid == uuid) {
                 // Clear the puppet and zero the actor
-                actor_offset = ACTOR_LIST_STACK_OFFSET + (SIZEOF_ACTOR * i)
-                this.puppets[i] = new Puppet(this.ModLoader.emulator)
-                this.ModLoader.emulator.rdramWriteBuffer(ACTOR_LIST_POINTER + actor_offset, copy_data)
+                actor_offset = ACTOR_LIST_POINTER + (SIZEOF_ACTOR * this.puppets[i].index)
+                this.ModLoader.emulator.rdramWriteBuffer(actor_offset, copy_data)
+                this.puppets.splice(i)
                 break
             }
         }
@@ -98,17 +118,18 @@ export class PuppetOverlord {
         let i
         let actor_offset
         let copy_data = Buffer.alloc(SIZEOF_ACTOR, 0)
-        for (i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
-            actor_offset = ACTOR_LIST_STACK_OFFSET + (SIZEOF_ACTOR * i)
-            this.puppets[i] = new Puppet(this.ModLoader.emulator)
-            this.ModLoader.emulator.rdramWriteBuffer(ACTOR_LIST_POINTER + actor_offset, copy_data)
+
+        for (i = 0; i < this.puppets.length; i++) {
+            actor_offset = ACTOR_LIST_POINTER + (SIZEOF_ACTOR * this.puppets[i].index)
+            this.ModLoader.emulator.rdramWriteBuffer(actor_offset, copy_data)
         }
 
+        this.puppets = []
     }
 
     getPuppet(uuid: string) {
         let i
-        for (i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
+        for (i = 0; i < this.puppets.length; i++) {
             if (this.puppets[i].uuid == uuid) {
                 return this.puppets[i] // Should be a reference
             }

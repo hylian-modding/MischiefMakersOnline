@@ -7,7 +7,14 @@ export interface IGame {
     is_paused: number
     game_timer: number
     in_cutscene: number
-    game_state: number
+    game_state: number /*
+                1 = intro splash
+                2 = title screen
+                5 = loading
+                6 = in level
+                11 = file select
+                12 = level select
+    */
     temp_state: number
     controller: number
     controller_pressed: number
