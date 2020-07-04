@@ -89,6 +89,11 @@ class MischiefMakersClient {
             if (frame % 6 == 0) {
                 packets.push(new UpdatePlayerDataPacket(this.core.marina as unknown as Actor, this.ModLoader.clientLobby))
             }
+            if (frame % 60 == 0) {
+                // Every second, update pos and vel
+                packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
+                packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+            }
 
             // Instantly update if changed direction or stopped/started moving
             if (
@@ -197,6 +202,7 @@ class MischiefMakersClient {
                         this.puppet_overlord.puppets[i].last_pos.y + (lv.y * (frame - this.puppet_overlord.puppets[i].last_update)),
                         0
                     )
+
                     delta_pos = new Vector3(extrap_pos.x - this.core.marina.camera_pos_final.x, extrap_pos.y - this.core.marina.camera_pos_final.y, 0);
                     this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
                     this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos

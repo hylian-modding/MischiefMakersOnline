@@ -11,6 +11,7 @@ import Vector2 from './Math/Vector2';
 */
 export const ACTOR_LIST_STACK_OFFSET: number = SIZEOF_ACTOR * 1
 export const ACTOR_LIST_NUM_GENERATED: number = 8
+export const ACTOR_LIST_SIZE: number = 0xC0
 
 export class Puppet {
     in_use = 0

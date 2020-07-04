@@ -8,7 +8,7 @@ import MischiefMakersClient from "./MischiefMakersClient"
 import MischiefMakersServer from "./MischiefMakersServer"
 import MischiefMakersOnlineStorage from "./MischiefMakersOnlineStorage";
 
-export class MischiefMakersOnline implements IPlugin {
+export class MischiefMakersOnline implements IPlugin, IPluginServerConfig {
     ModLoader = {} as IModLoaderAPI
     name = "MischiefMakersOnline"
 
@@ -37,6 +37,10 @@ export class MischiefMakersOnline implements IPlugin {
 
     @EventHandler(EventsClient.ON_INJECT_FINISHED)
     onClient_InjectFinished(evt: any) {}
+
+    getServerURL(): string {
+        return "192.99.70.23:8030";
+    }
 }
 
 module.exports = MischiefMakersOnline

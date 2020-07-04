@@ -51,7 +51,7 @@ export interface IActor {
     flags_1: number // u32
     health: number // short
     damage_queue: number // short
-    velocity: Vector2 // short, padding (2), short, padding (2)
+    velocity: Vector2 // short, padding (2), short, padding (2), short, padding (2) <- Should we include the Z value?
     scaleXY: number // float
     scale_1: Vector2 // float[2]
     air_ground_state: number // short
