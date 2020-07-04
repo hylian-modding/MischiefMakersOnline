@@ -79,11 +79,11 @@ class MischiefMakersClient {
             this.last_best_times = this.core.save.best_times
         }
 
-        if (this.core.game.in_cutscene == 0 && this.core.game.is_paused == 0) {
+        if (!this.core.game.in_cutscene && !this.core.game.is_paused) {
             if (frame % 3 == 0) {
 
-                // If moving, update position, always update velocity
-                packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
+                // If moving, update position, update velocity on change
+                if (this.core.marina.velocity != this.last_velocity) packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
                 if (this.core.marina.velocity.magnitude() != 0) packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
             }
             if (frame % 6 == 0) {
@@ -117,7 +117,7 @@ class MischiefMakersClient {
             this.puppet_overlord.freeAllPuppets()
         }
 
-        let delta_pos, extrap_pos, nf
+        let delta_pos, extrap_pos, lv
         for (i = 0; i < ACTOR_LIST_NUM_GENERATED; i++) {
             if (this.puppet_overlord.puppets[i].in_use && this.puppet_overlord.puppets[i].actor.health > 0) {
 
@@ -181,9 +181,14 @@ class MischiefMakersClient {
                 }*/
 
                 // Extrapolate puppet positions, save the network!
-                let lv = new Vector2(this.puppet_overlord.puppets[i].last_vel.x, this.puppet_overlord.puppets[i].last_vel.y)
+                lv = new Vector2(this.puppet_overlord.puppets[i].last_vel.x, this.puppet_overlord.puppets[i].last_vel.y)
                 if (lv.magnitude() == 0) {
-                    this.puppet_overlord.puppets[i].actor.pos_2 = new Vector3(this.puppet_overlord.puppets[i].last_pos.x - this.core.marina.camera_pos_final.x, this.puppet_overlord.puppets[i].last_pos.y - this.core.marina.camera_pos_final.y, 0);
+                    delta_pos = new Vector3(this.puppet_overlord.puppets[i].last_pos.x - this.core.marina.camera_pos_final.x, this.puppet_overlord.puppets[i].last_pos.y - this.core.marina.camera_pos_final.y, 0);
+                    this.puppet_overlord.puppets[i].actor.pos_0 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_1 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_2 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_3 = delta_pos
+                    this.puppet_overlord.puppets[i].actor.pos_4 = delta_pos
                     this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
                 }
                 else {
@@ -240,13 +245,9 @@ class MischiefMakersClient {
     onPosPacket(packet: UpdatePlayerPositionPacket) {
         if (packet.player.uuid != this.ModLoader.me.uuid) {
             let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-            if (player_puppet != null) {
+            if (player_puppet) {
                 player_puppet.last_pos = packet.pos
                 player_puppet.last_update = this.last_frame
-            }
-            else {
-                let result = this.puppet_overlord.addPuppet(packet.player.uuid)
-                this.ModLoader.logger.warn("Trying to make puppet for " + packet.player.uuid + "... " + `${(result) ? 'success' : 'fail'}`)
             }
         }
     }
@@ -255,7 +256,7 @@ class MischiefMakersClient {
     onVelPacket(packet: UpdatePlayerVelocityPacket) {
         if (packet.player.uuid != this.ModLoader.me.uuid) {
             let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-            if (player_puppet != null) {
+            if (player_puppet) {
                 player_puppet.last_vel = packet.vel
                 player_puppet.last_update = this.last_frame
             }
@@ -273,6 +274,12 @@ class MischiefMakersClient {
                 player_puppet.actor.scaleXY = packet.scaleXY
                 player_puppet.actor.scale_0 = packet.scale_0
                 player_puppet.actor.scale_1 = packet.scale_1
+            }
+            else {
+                if (!this.core.game.in_cutscene && !this.core.game.is_paused) {
+                    let result = this.puppet_overlord.addPuppet(packet.player.uuid)
+                    this.ModLoader.logger.warn("Trying to make puppet for " + packet.player.uuid + "... " + `${(result) ? 'success' : 'fail'}`)
+                }
             }
         }
     }
