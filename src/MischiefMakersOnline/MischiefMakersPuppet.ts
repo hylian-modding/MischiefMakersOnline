@@ -5,12 +5,7 @@ import IMemory from 'modloader64_api/IMemory';
 import Vector3 from 'modloader64_api/math/Vector3';
 import Vector2 from './Math/Vector2';
 
-/*
- * Is this safe? Unlikely lul
- * Gotta find the method that generates these safely
-*/
 export const ACTOR_LIST_SIZE: number = 0xC0
-
 
 export class Puppet {
     uuid: string = ""

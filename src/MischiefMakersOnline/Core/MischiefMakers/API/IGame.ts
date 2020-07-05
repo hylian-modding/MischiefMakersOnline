@@ -8,19 +8,28 @@ export interface IGame {
     game_timer: number
     in_cutscene: number
     game_state: number /*
-                1 = intro splash
-                2 = title screen
-                5 = loading
-                6 = in level
-                11 = file select
-                12 = level select
-    */
+                0x00 = soft reset
+                0x01 = intro splash
+                0x02 = title screen
+                0x03 = sound test
+                0x04 = secret level select
+                0x05 = loading
+                0x06 = in level
+                0x07 = fade out to death screen
+                0x08 = intentional trap (This appears to be intended behaviour in this mode)
+                0x09 = ??? (The instructions just after the trap)
+                0x0A = demo mode
+                0x0B = file select
+                0x0C = stage transition
+                0x0E = best times screen
+                (See the proc at 0x800015F0)*/
     temp_state: number
     controller: number
     controller_pressed: number
     keybinds: Buffer // 0x38 size
     joy_x: number
     joy_y: number   
+    current_scene: number
 }
 
 export class Game implements IGame {
@@ -72,6 +81,10 @@ export class Game implements IGame {
 
     get joy_y() {
         return this.emulator.rdramRead16(GAME_CONTEXT_POINTER + 0x70)
+    }
+
+    get current_scene() {
+        return this.emulator.rdramRead16(0x800D08D4)
     }
 }
 

@@ -21,11 +21,8 @@ export class MischiefMakers implements IMischiefMakersCore {
     save!: ISave
 
     preinit() {}
-
     init() {}
-
     postinit() {}
-
     onTick() {}
 }
 

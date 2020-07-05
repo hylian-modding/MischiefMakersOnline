@@ -5,7 +5,7 @@ import { IModLoaderAPI, ModLoaderEvents } from 'modloader64_api/IModLoaderAPI';
 import { IPacketHeader, ServerNetworkHandler, INetworkPlayer } from 'modloader64_api/NetworkHandler';
 import MischiefMakersOnline from './MischiefMakersOnline';
 import MischiefMakersOnlineStorage from './MischiefMakersOnlineStorage';
-import { GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, CurrentStagePacket, UpdatePlayerPositionPacket, UpdatePlayerRGBAPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket } from './MischiefMakersPacketTypes'
+import { GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerPositionPacket, UpdatePlayerRGBAPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, SceneChangePacket, UpdatePlayerScalePacket } from './MischiefMakersPacketTypes'
 
 class MischiefMakersServer {
     @ModLoaderAPIInject() ModLoader!: IModLoaderAPI;
@@ -26,6 +26,7 @@ class MischiefMakersServer {
 
         storage.players[evt.player.uuid] = -1
         storage.networkPlayerInstances[evt.player.uuid] = evt.player
+        storage.scenes[evt.player.uuid] = 0
     }
 
     @EventHandler(EventsServer.ON_LOBBY_LEAVE)
@@ -36,8 +37,35 @@ class MischiefMakersServer {
 
         delete storage.players[evt.player.uuid]
         delete storage.networkPlayerInstances[evt.player.uuid]
+        delete storage.scenes[evt.player.uuid]
     }
 
+
+    sendPacketToAllPlayers(packet: IPacketHeader) {
+        try {
+            let storage: MischiefMakersOnlineStorage = this.ModLoader.lobbyManager.getLobbyStorage(packet.lobby, this.parent)
+
+            if (storage === null) return
+
+            Object.keys(storage.players).forEach((key: string) => {
+                this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, storage.networkPlayerInstances[key])
+            })
+        } catch(err) {}
+    }
+
+    sendPacketToAllPlayersExceptSender(packet: IPacketHeader) {
+        try {
+            let storage: MischiefMakersOnlineStorage = this.ModLoader.lobbyManager.getLobbyStorage(packet.lobby, this.parent)
+
+            if (storage === null) return
+
+            Object.keys(storage.players).forEach((key: string) => {
+                if ((storage.networkPlayerInstances[key] as unknown as INetworkPlayer).uuid != packet.player.uuid) {
+                    this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, storage.networkPlayerInstances[key])
+                }
+            })
+        } catch(err) {}
+    }
 
     sendPacketToPlayersInScene(packet: IPacketHeader) {
         try {
@@ -45,9 +73,10 @@ class MischiefMakersServer {
 
             if (storage === null) return
 
-            //TODO: Fix the current scene check
             Object.keys(storage.players).forEach((key: string) => {
-                this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, storage.networkPlayerInstances[key])
+                if (storage.scenes[packet.player.uuid] == storage.scenes[(storage.networkPlayerInstances[key] as unknown as INetworkPlayer).uuid]) {
+                    this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, storage.networkPlayerInstances[key])
+                }
             })
         } catch(err) {}
     }
@@ -58,10 +87,11 @@ class MischiefMakersServer {
 
             if (storage === null) return
 
-            //TODO: Fix the current scene check
             Object.keys(storage.players).forEach((key: string) => {
-                if ((storage.networkPlayerInstances[key] as unknown as INetworkPlayer).uuid != packet.player.uuid) {
-                    this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, storage.networkPlayerInstances[key])
+                if (storage.scenes[packet.player.uuid] == storage.scenes[(storage.networkPlayerInstances[key] as unknown as INetworkPlayer).uuid]) {
+                    if ((storage.networkPlayerInstances[key] as unknown as INetworkPlayer).uuid != packet.player.uuid) {
+                        this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, storage.networkPlayerInstances[key])
+                    }
                 }
             })
         } catch(err) {}
@@ -70,7 +100,6 @@ class MischiefMakersServer {
 
     // Progress Syncing
 
-    // Gold Gems
     @ServerNetworkHandler('mmo_cGold')
     onSyncGoldGemsServer(packet: GoldGemsPacket) {
         try {
@@ -82,9 +111,7 @@ class MischiefMakersServer {
                 storage.gold_gems[i] |= packet.gold_gems[i]
             }
 
-            this.sendPacketToPlayersInScene(new GoldGemsPacket(storage.gold_gems, packet.lobby, 1))
-
-            this.ModLoader.logger.info("got mmo_cGold: " + storage.gold_gems.readBigUInt64BE(0).toString(16))
+            this.sendPacketToAllPlayers(new GoldGemsPacket(storage.gold_gems, packet.lobby, 1))
         }
         catch (err) {}
     }
@@ -103,12 +130,8 @@ class MischiefMakersServer {
             if (storage.unlocked_levels.readInt32BE(0) < packet.unlocked_levels.readInt32BE(0))
             {
                 storage.unlocked_levels = packet.unlocked_levels
-                this.sendPacketToPlayersInScene(new UnlockedLevelsPacket(storage.unlocked_levels, packet.lobby, 1))
+                this.sendPacketToAllPlayers(new UnlockedLevelsPacket(storage.unlocked_levels, packet.lobby, 1))
             }
-
-            
-
-            this.ModLoader.logger.info("got mmo_cLevels: " + storage.unlocked_levels.readInt32BE(0).toString(16))
         }
         catch (err) {}
     }
@@ -121,15 +144,10 @@ class MischiefMakersServer {
             if (storage === null) return
 
             storage.best_times = packet.best_times
-            this.sendPacketToPlayersInScene(new BestTimesPacket(storage.best_times, packet.lobby, 1))
-
-            this.ModLoader.logger.info("got mmo_cTimes")
+            this.sendPacketToAllPlayers(new BestTimesPacket(storage.best_times, packet.lobby, 1))
         }
         catch (err) {}
     }
-
-    @ServerNetworkHandler('mmo_cStage')
-    onUpdateCurrentStageServer(packet: CurrentStagePacket) {}
 
     @ServerNetworkHandler('mmo_cPos')
     onUpdateCurrentPositionServer(packet: UpdatePlayerPositionPacket) {
@@ -152,14 +170,32 @@ class MischiefMakersServer {
         this.sendPacketToPlayersInSceneExceptSender(packet)
     }
 
+    @ServerNetworkHandler('mmo_cPScale')
+    onPlayerScale(packet: UpdatePlayerScalePacket) {
+        packet.packet_id = "mmo_sPScale"
+        this.sendPacketToPlayersInSceneExceptSender(packet)
+    }
+
     @ServerNetworkHandler('mmo_cPing')
     onPing(packet: PingServerPacket) {
+        packet.packet_id = "mmo_sPing"
         this.ModLoader.serverSide.sendPacketToSpecificPlayer(packet, packet.player)
     }
 
     @ServerNetworkHandler('mmo_cPPing')
     onPlayerPing(packet: PingServerPacket) {
+        packet.packet_id = "mmo_sPPing"
         this.sendPacketToPlayersInSceneExceptSender(packet)
+    }
+
+    @ServerNetworkHandler('mmo_cScene')
+    onSceneChange(packet: SceneChangePacket) {
+        let storage: MischiefMakersOnlineStorage = this.ModLoader.lobbyManager.getLobbyStorage(packet.lobby, this.parent)
+        if (storage === null) return
+        storage.scenes[packet.player.uuid] = packet.scene
+        packet.packet_id = "mmo_sScene"
+        this.sendPacketToAllPlayersExceptSender(packet)
+        this.ModLoader.logger.info("Player " + packet.player.nickname + " [" + packet.player.uuid + "] moved to scene " + packet.scene)
     }
 
 

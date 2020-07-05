@@ -1,4 +1,4 @@
-class MischiefMakersOnlineSaveStorage {
+export class MischiefMakersOnlineSaveStorage {
     constructor() {}
 
     gold_gems: Buffer = Buffer.alloc(8);
@@ -11,6 +11,7 @@ export class MischiefMakersOnlineStorage extends MischiefMakersOnlineSaveStorage
     
     networkPlayerInstances: any = {};
     players: any = {}
+    scenes: any = {}
 }
 
 export default MischiefMakersOnlineStorage

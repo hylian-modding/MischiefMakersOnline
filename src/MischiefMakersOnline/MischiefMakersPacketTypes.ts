@@ -31,15 +31,6 @@ export class BestTimesPacket extends Packet {
     }
 }
 
-export class CurrentStagePacket extends Packet {
-    current_stage: number
-
-    constructor(stage: number, lobby: string, is_server: number = 0) {
-        super(`mmo_${(is_server) ? 's' : 'c'}Stage`, "mmo", lobby, false)
-        this.current_stage = stage
-    }
-}
-
 export class UpdatePlayerPositionPacket extends Packet {
     pos: Vector2
 
@@ -68,21 +59,31 @@ export class UpdatePlayerRGBAPacket extends Packet {
 }
 
 export class UpdatePlayerDataPacket extends Packet {
+    mode: number
     effect_flags: number
     health: number
     air_ground_state: number
     idle_time: number
-    scaleXY: number
-    scale_0: Vector2
-    scale_1: Vector2
+    
     
 
     constructor(lhs: Actor, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}PData`, "mmo", lobby, false)
+        this.mode = lhs.mode
         this.effect_flags = lhs.effect_flags
         this.health = lhs.health
         this.air_ground_state = lhs.air_ground_state
         this.idle_time = lhs.idle_time
+    }
+}
+
+export class UpdatePlayerScalePacket extends Packet {
+    scaleXY: number
+    scale_0: Vector2
+    scale_1: Vector2
+
+    constructor(lhs: Actor, lobby: string, is_server: number = 0) {
+        super(`mmo_${(is_server) ? 's' : 'c'}PScale`, "mmo", lobby, false)
         this.scaleXY = lhs.scaleXY
         this.scale_0 = lhs.scale_0
         this.scale_1 = lhs.scale_1
@@ -90,11 +91,11 @@ export class UpdatePlayerDataPacket extends Packet {
 }
 
 export class PingServerPacket extends Packet {
-    time_sent: Date
+    time_sent: number
 
     constructor(tick: Date, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}Ping`, "mmo", lobby, false)
-        this.time_sent = tick;
+        this.time_sent = tick.valueOf();
     }
 }
 
@@ -104,6 +105,15 @@ export class PlayerPingPacket extends Packet {
     constructor(ping: number, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}PPing`, "mmo", lobby, false)
         this.ping = ping
+    }
+}
+
+export class SceneChangePacket extends Packet {
+    scene: number
+
+    constructor(scene: number, lobby: string, is_server: number = 0) {
+        super(`mmo_${(is_server) ? 's' : 'c'}Scene`, "mmo", lobby, false)
+        this.scene = scene
     }
 }
 

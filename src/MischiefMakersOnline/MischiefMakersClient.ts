@@ -6,7 +6,7 @@ import { Init, Preinit, Postinit, onTick } from 'modloader64_api/PluginLifecycle
 import { IModLoaderAPI, ModLoaderEvents } from 'modloader64_api/IModLoaderAPI';
 import { ModLoaderAPIInject } from 'modloader64_api/ModLoaderAPIInjector';
 import { Player, Actor, ACTOR_LIST_POINTER } from './Core/MischiefMakers/API/IActor';
-import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, PlayerPingPacket } from './MischiefMakersPacketTypes';
+import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, PlayerPingPacket, SceneChangePacket, UpdatePlayerScalePacket } from './MischiefMakersPacketTypes';
 import { Save } from './Core/MischiefMakers/API/ISave';
 import { PuppetOverlord, Puppet } from './MischiefMakersPuppet';
 import { Game } from './Core/MischiefMakers/API/IGame';
@@ -17,13 +17,17 @@ import { Packet } from 'modloader64_api/ModLoaderDefaultImpls';
 const DT: number = 1 / 60
 
 class MischiefMakersClient {
-    last_player_state!: Buffer
     last_gold_gems!: Buffer
     last_unlocked_levels!: Buffer
     last_best_times!: Buffer
 
     last_velocity!: Vector2
 
+    last_scale_0!: Vector2
+    last_scale_1!: Vector2
+    last_scale_XY!: number
+
+    last_scene!: number
     last_frame!: number
     last_ping!: number
 
@@ -45,11 +49,14 @@ class MischiefMakersClient {
 
     @Postinit()
     postinit() {
-        this.last_player_state = Buffer.alloc(0x198)
         this.last_gold_gems = Buffer.alloc(8)
         this.last_unlocked_levels = Buffer.alloc(4)
         this.last_best_times = Buffer.alloc(0x90)
         this.last_velocity = new Vector2()
+        this.last_scale_0 = new Vector2(1, 1)
+        this.last_scale_1 = new Vector2(1, 1)
+        this.last_scale_XY = 1
+        this.last_scene = 0
         this.last_frame = 0
         this.last_ping = 0
 
@@ -65,30 +72,24 @@ class MischiefMakersClient {
         let i = 0
         let packets: Packet[] = []
 
-        // Assuming that all client changes are safe enough; with safety on the server
-        if (!this.core.save.gold_gems.equals(this.last_gold_gems)) {
-            packets.push(new GoldGemsPacket(this.core.save.gold_gems, this.ModLoader.clientLobby))
-            this.last_gold_gems = this.core.save.gold_gems
-        }
-
-        if (!this.core.save.unlocked_levels.equals(this.last_unlocked_levels)) {
-            packets.push(new UnlockedLevelsPacket(this.core.save.unlocked_levels, this.ModLoader.clientLobby))
-            this.last_unlocked_levels = this.core.save.unlocked_levels
-        }
-
-        if (!this.core.save.best_times.equals(this.last_best_times)) {
-            packets.push(new BestTimesPacket(this.core.save.best_times, this.ModLoader.clientLobby))
-            this.last_best_times = this.core.save.best_times
-        }
+        if (!this.core.save.gold_gems.equals(this.last_gold_gems)) packets.push(new GoldGemsPacket(this.core.save.gold_gems, this.ModLoader.clientLobby))
+        if (!this.core.save.unlocked_levels.equals(this.last_unlocked_levels)) packets.push(new UnlockedLevelsPacket(this.core.save.unlocked_levels, this.ModLoader.clientLobby))
+        if (!this.core.save.best_times.equals(this.last_best_times)) packets.push(new BestTimesPacket(this.core.save.best_times, this.ModLoader.clientLobby))
+        if (this.last_scene != this.core.game.current_scene) packets.push(new SceneChangePacket(this.last_scene, this.ModLoader.clientLobby))
 
         if (this.arePuppetsSafe()) {
             if (frame % 3 == 0) {
-
                 // If moving, update position, update velocity on change
                 if (this.core.marina.velocity != this.last_velocity) packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
-                if (this.core.marina.velocity.magnitude() != 0) packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+                if (this.core.marina.velocity.magnitude() != 0 || (this.core.marina.mode & 0x0A000000) != 0) packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+
+                if (this.core.marina.scale_0 != this.last_scale_0 || this.core.marina.scale_1 != this.last_scale_1 || this.core.marina.scaleXY != this.last_scale_XY) {
+                    packets.push(new UpdatePlayerScalePacket(this.core.marina as unknown as Actor, this.ModLoader.clientLobby))
+                }
             }
-            if (frame % 6 == 0) {
+
+
+            if (frame % 5 == 0) {
                 packets.push(new UpdatePlayerDataPacket(this.core.marina as unknown as Actor, this.ModLoader.clientLobby))
             }
             if (frame % 60 == 0) {
@@ -139,7 +140,7 @@ class MischiefMakersClient {
                 this.puppet_overlord.puppets[i].actor.velocity = new Vector2()
             }
             else {
-                latency_frames = Math.round((this.puppet_overlord.puppets[i].getAveragePing() * 1000) / 16)
+                latency_frames = Math.floor((this.puppet_overlord.puppets[i].getAveragePing() * 1000) / 16)
                 extrap_pos = new Vector3(
                     this.puppet_overlord.puppets[i].last_pos.x + (lv.x * ((frame - this.puppet_overlord.puppets[i].last_update) + latency_frames)),
                     this.puppet_overlord.puppets[i].last_pos.y + (lv.y * ((frame - this.puppet_overlord.puppets[i].last_update) + latency_frames)),
@@ -160,8 +161,14 @@ class MischiefMakersClient {
             this.ModLoader.clientSide.sendPacket(packets[i])
         }
 
+        this.last_gold_gems = this.core.save.gold_gems
+        this.last_unlocked_levels = this.core.save.unlocked_levels
+        this.last_best_times = this.core.save.best_times
         this.last_velocity = this.core.marina.velocity
-        this.last_player_state = this.ModLoader.emulator.rdramReadBuffer(ACTOR_LIST_POINTER, 0x198)
+        this.last_scale_0 = this.core.marina.scale_0
+        this.last_scale_1 = this.core.marina.scale_1
+        this.last_scale_XY = this.core.marina.scaleXY
+        this.last_scene = this.core.game.current_scene
         this.last_frame = frame
     }
 
@@ -169,12 +176,17 @@ class MischiefMakersClient {
         return (!this.core.game.in_cutscene && !this.core.game.is_paused && this.core.game.game_state == 6)
     }
 
-    arePuppetsUnsafe(): boolean {
-        return (this.core.game.in_cutscene != 0 || this.core.game.is_paused != 0 || this.core.game.game_state != 6)
+    makePuppet(uuid: string): number {
+        let result = 0
+        if (this.arePuppetsSafe()) {
+            result = this.puppet_overlord.addPuppet(uuid)
+            this.ModLoader.logger.warn("Trying to make puppet for " + uuid + "... " + `${(result) ? 'success' : 'fail'}`)
+        }
+
+        return result
     }
 
 
-    // TODO: move if uuid == uuid to server side
     @NetworkHandler('mmo_sGold')
     onGoldGemsPacket(packet: GoldGemsPacket) {
         this.core.save.gold_gems = packet.gold_gems
@@ -203,6 +215,7 @@ class MischiefMakersClient {
             player_puppet.last_pos = packet.pos
             player_puppet.last_update = this.last_frame
         }
+        else this.makePuppet(packet.player.uuid)
     }
 
     @NetworkHandler('mmo_sVel')
@@ -212,39 +225,50 @@ class MischiefMakersClient {
             player_puppet.last_vel = packet.vel
             player_puppet.last_update = this.last_frame
         }
+        else this.makePuppet(packet.player.uuid)
     }
 
     @NetworkHandler('mmo_sPData')
     onPlayerData(packet: UpdatePlayerDataPacket) {
         let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
         if (player_puppet) {
+            player_puppet.actor.mode = packet.mode
             player_puppet.actor.effect_flags = packet.effect_flags
             player_puppet.actor.air_ground_state = packet.air_ground_state
             player_puppet.actor.idle_time = packet.idle_time
+        }
+        else this.makePuppet(packet.player.uuid)
+    }
+
+    @NetworkHandler('mmo_sPScale')
+    onPlayerScale(packet: UpdatePlayerScalePacket) {
+        let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
+        if (player_puppet) {
             player_puppet.actor.scaleXY = packet.scaleXY
             player_puppet.actor.scale_0 = packet.scale_0
             player_puppet.actor.scale_1 = packet.scale_1
         }
-        else {
-            if (this.arePuppetsSafe()) {
-                let result = this.puppet_overlord.addPuppet(packet.player.uuid)
-                this.ModLoader.logger.warn("Trying to make puppet for " + packet.player.uuid + "... " + `${(result) ? 'success' : 'fail'}`)
-            }
-        }
+        else this.makePuppet(packet.player.uuid)
     }
 
     @NetworkHandler('mmo_sPing')
     onPing(packet: PingServerPacket) {
         let time = new Date()
-        this.last_ping = (time.valueOf() - packet.time_sent.valueOf()) / 1000
+        this.last_ping = (time.valueOf() - packet.time_sent) / 1000
         this.ModLoader.clientSide.sendPacket(new PlayerPingPacket(this.last_ping, this.ModLoader.clientLobby))
-        this.ModLoader.logger.debug("Ping: " + this.last_ping.toString())
     }
 
     @NetworkHandler('mmo_sPPing')
     onPlayerPing(packet: PlayerPingPacket) {
         let player_puppet: Puppet | undefined = this.puppet_overlord.getPuppet(packet.player.uuid)
-        if (player_puppet) player_puppet.pushNewPing(packet.ping)     
+        if (player_puppet) player_puppet.pushNewPing(packet.ping)
+        else this.makePuppet(packet.player.uuid)
+    }
+
+    @NetworkHandler('mmo_sScene')
+    onSceneChange(packet: SceneChangePacket) {
+        if (packet.scene != this.last_scene) this.puppet_overlord.freePuppet(packet.player.uuid)
+        else this.makePuppet(packet.player.uuid)
     }
 }
 
