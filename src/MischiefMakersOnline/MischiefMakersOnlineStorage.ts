@@ -8,10 +8,11 @@ export class MischiefMakersOnlineSaveStorage {
 
 export class MischiefMakersOnlineStorage extends MischiefMakersOnlineSaveStorage {
     constructor() { super() }
-    
+
     networkPlayerInstances: any = {};
     players: any = {}
     scenes: any = {}
+    scene_data: any = {}
 }
 
 export default MischiefMakersOnlineStorage

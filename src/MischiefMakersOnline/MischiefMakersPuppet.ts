@@ -14,12 +14,12 @@ export class Puppet {
     last_pos: Vector2 = new Vector2()
     last_vel: Vector2 = new Vector2()
     last_update: number = 0
-    
+
     actor!: Actor
 
     constructor(emu: IMemory, actor_index: number = -1, uuid: string = "") {
         this.uuid = uuid;
-        this.last_pos = new Vector2()
+        this.last_pos = new Vector3()
         this.last_vel = new Vector2()
         this.index = actor_index
         this.actor = new Actor(emu, actor_index)
@@ -46,7 +46,7 @@ export class Puppet {
 
 export class PuppetOverlord {
     ModLoader!: IModLoaderAPI;
-    
+
     puppets: Puppet[];
 
     constructor(ModLoader: IModLoaderAPI) {
@@ -66,7 +66,7 @@ export class PuppetOverlord {
 
         for (i = 1; i < ACTOR_LIST_SIZE; i++) {
             actor = new Actor(this.ModLoader.emulator, i);
-            if ((actor.mode & 2) == 0) {
+            if (!actor.is_alive) {
                 free_slot = i
                 this.ModLoader.logger.info("Found free slot at " + i.toString())
                 break
@@ -81,7 +81,7 @@ export class PuppetOverlord {
             // Copy and paste the player actor
             copy_data = this.ModLoader.emulator.rdramReadBuffer(ACTOR_LIST_POINTER, SIZEOF_ACTOR)
             this.ModLoader.emulator.rdramWriteBuffer(i, copy_data)
-            
+
             //0x0E, 0x0F, 0x21, 0x60, 0x61
             this.puppets[this.puppets.length - 1].actor.status = 0x0000
             this.puppets[this.puppets.length - 1].actor.type = 0x0060
@@ -129,6 +129,14 @@ export class PuppetOverlord {
                 return this.puppets[i] // Should be a reference
             }
         }
+    }
+
+    isIndexPuppet(index: number): boolean {
+        for (let i = 0; i < this.puppets.length; i++) {
+            if (this.puppets[i].index == index) return true
+        }
+
+        return false
     }
 
 

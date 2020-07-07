@@ -2,7 +2,7 @@ import Vector2 from './Math/Vector2'
 import Vector3 from 'modloader64_api/math/Vector3';
 import { Packet, packetHelper, UDPPacket} from 'modloader64_api/ModLoaderDefaultImpls';
 import { sign } from 'crypto';
-import { Actor } from './Core/MischiefMakers/API/IActor';
+import { Actor, SceneActorUpdate } from './Core/MischiefMakers/API/IActor';
 
 export class GoldGemsPacket extends Packet {
     gold_gems: Buffer
@@ -32,9 +32,9 @@ export class BestTimesPacket extends Packet {
 }
 
 export class UpdatePlayerPositionPacket extends Packet {
-    pos: Vector2
+    pos: Vector3
 
-    constructor(lhs: Vector2, lobby: string, is_server: number = 0) {
+    constructor(lhs: Vector3, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}Pos`, "mmo", lobby, false)
         this.pos = lhs
     }
@@ -64,8 +64,8 @@ export class UpdatePlayerDataPacket extends Packet {
     health: number
     air_ground_state: number
     idle_time: number
-    
-    
+
+
 
     constructor(lhs: Actor, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}PData`, "mmo", lobby, false)
@@ -113,6 +113,17 @@ export class SceneChangePacket extends Packet {
 
     constructor(scene: number, lobby: string, is_server: number = 0) {
         super(`mmo_${(is_server) ? 's' : 'c'}Scene`, "mmo", lobby, false)
+        this.scene = scene
+    }
+}
+
+export class SceneUpdatePacket extends Packet {
+    update_data: SceneActorUpdate[]
+    scene: number
+
+    constructor(data: SceneActorUpdate[], scene: number, lobby: string, is_server: number = 0) {
+        super(`mmo_${(is_server) ? 's' : 'c'}SceneU`, "mmo", lobby, false)
+        this.update_data = data
         this.scene = scene
     }
 }

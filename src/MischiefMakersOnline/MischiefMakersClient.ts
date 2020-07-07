@@ -5,16 +5,19 @@ import { IMischiefMakersCore, MischiefMakers } from './Core/MischiefMakers/Misch
 import { Init, Preinit, Postinit, onTick } from 'modloader64_api/PluginLifecycle';
 import { IModLoaderAPI, ModLoaderEvents } from 'modloader64_api/IModLoaderAPI';
 import { ModLoaderAPIInject } from 'modloader64_api/ModLoaderAPIInjector';
-import { Player, Actor, ACTOR_LIST_POINTER } from './Core/MischiefMakers/API/IActor';
-import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, PlayerPingPacket, SceneChangePacket, UpdatePlayerScalePacket } from './MischiefMakersPacketTypes';
+import { Player, Actor, ACTOR_LIST_POINTER, SceneActor, SIZEOF_ACTOR, SceneActorUpdate } from './Core/MischiefMakers/API/IActor';
+import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, PlayerPingPacket, SceneChangePacket, UpdatePlayerScalePacket, SceneUpdatePacket } from './MischiefMakersPacketTypes';
 import { Save } from './Core/MischiefMakers/API/ISave';
-import { PuppetOverlord, Puppet } from './MischiefMakersPuppet';
+import { PuppetOverlord, Puppet, ACTOR_LIST_SIZE } from './MischiefMakersPuppet';
 import { Game } from './Core/MischiefMakers/API/IGame';
 import Vector3 from 'modloader64_api/math/Vector3';
 import Vector2 from './Core/MischiefMakers/Math/Vector2';
 import { Packet } from 'modloader64_api/ModLoaderDefaultImpls';
+import { throws } from 'assert';
 
 const DT: number = 1 / 60
+
+
 
 class MischiefMakersClient {
     last_gold_gems!: Buffer
@@ -30,6 +33,9 @@ class MischiefMakersClient {
     last_scene!: number
     last_frame!: number
     last_ping!: number
+
+    scene_sync!: boolean
+    scene_actors!: SceneActor[]
 
     core: MischiefMakers
 
@@ -60,6 +66,9 @@ class MischiefMakersClient {
         this.last_frame = 0
         this.last_ping = 0
 
+        this.scene_sync = false
+        this.scene_actors = new Array(0x40)
+
         this.puppet_overlord = new PuppetOverlord(this.ModLoader)
 
         this.core.marina = new Player(this.ModLoader.emulator, 0);
@@ -75,16 +84,54 @@ class MischiefMakersClient {
         if (!this.core.save.gold_gems.equals(this.last_gold_gems)) packets.push(new GoldGemsPacket(this.core.save.gold_gems, this.ModLoader.clientLobby))
         if (!this.core.save.unlocked_levels.equals(this.last_unlocked_levels)) packets.push(new UnlockedLevelsPacket(this.core.save.unlocked_levels, this.ModLoader.clientLobby))
         if (!this.core.save.best_times.equals(this.last_best_times)) packets.push(new BestTimesPacket(this.core.save.best_times, this.ModLoader.clientLobby))
-        if (this.last_scene != this.core.game.current_scene) packets.push(new SceneChangePacket(this.last_scene, this.ModLoader.clientLobby))
+        if (this.last_scene != this.core.game.current_scene) {
 
-        if (this.arePuppetsSafe()) {
+            for (i = 1; i < 0x40; i++) {
+                this.scene_actors[i] = new SceneActor(this.ModLoader.emulator, i)
+            }
+
+            packets.push(new SceneChangePacket(this.last_scene, this.ModLoader.clientLobby))
+        }
+
+        if (this.arePuppetsSafe() && this.core.game.stage_timer > 30) {
+
             if (frame % 3 == 0) {
                 // If moving, update position, update velocity on change
                 if (this.core.marina.velocity != this.last_velocity) packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
-                if (this.core.marina.velocity.magnitude() != 0 || (this.core.marina.mode & 0x0A000000) != 0) packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+                if (this.core.marina.velocity.magnitude() != 0 || (this.core.marina.mode & 0x0A000000) != 0) packets.push(new UpdatePlayerPositionPacket(new Vector3(this.core.marina.real_pos.x, this.core.marina.real_pos.y, this.core.marina.pos_2.z), this.ModLoader.clientLobby))
 
                 if (this.core.marina.scale_0 != this.last_scale_0 || this.core.marina.scale_1 != this.last_scale_1 || this.core.marina.scaleXY != this.last_scale_XY) {
                     packets.push(new UpdatePlayerScalePacket(this.core.marina as unknown as Actor, this.ModLoader.clientLobby))
+                }
+
+                /* FIXME: This is absolutely busted
+                 * No, seriously
+                 *  - Actor positions will always attenuate between clients because the AI is client-sided
+                 *    So for AI actors, thier pos / vel will result in a jittery mess and sometimes even cause them to fly to the moon (see Wormin' Up)
+                 *  - For some reason syncing mode leads to a emulator crash
+                 *  - Syncing status causes bugs when another client grabs an actor (which will always be the case unless the scene sync isn't even running because there is only one player)
+                 *  - Some special effects don't die
+                 *  - Sometimes switching zones in a level will cause the actors from the previous zone to warp to the left-or-right side of the screen (They're probably supposed to unload)
+                 *  - Sometimes the end-of-level star doesn't even appear (see any boss that has an end-of-level-star spawn once they are defeated)
+                 *  - Sometimes random actors from scenes past become alive
+                 *  - Probably a lot more lul
+                 * To get this working I might have to have a special case for certain categories of actors, and to omit more than just puppet actors.
+                */
+                if (this.scene_sync) { // TODO: Add this to a config... should I even?
+                    let updated_actors: SceneActorUpdate[] = []
+                    for (i = 1; i < 0x40; i++) {
+                        if (!this.puppet_overlord.isIndexPuppet(i)) {
+                            this.scene_actors[i].update(this.core.marina.camera_pos_final)
+                            if (this.scene_actors[i].changed) {
+                                this.scene_actors[i].changed = false
+                                updated_actors.push(this.scene_actors[i].getPacketData())
+                            }
+                        }
+                    }
+
+                    if (updated_actors.length > 0) {
+                        packets.push(new SceneUpdatePacket(updated_actors, this.core.game.current_scene, this.ModLoader.clientLobby))
+                    }
                 }
             }
 
@@ -95,7 +142,7 @@ class MischiefMakersClient {
             if (frame % 60 == 0) {
                 // Every second, update pos and vel
                 packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
-                packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+                packets.push(new UpdatePlayerPositionPacket(new Vector3(this.core.marina.real_pos.x, this.core.marina.real_pos.y, this.core.marina.pos_2.z), this.ModLoader.clientLobby))
                 packets.push(new PingServerPacket(new Date(), this.ModLoader.clientLobby))
             }
 
@@ -119,7 +166,7 @@ class MischiefMakersClient {
                 }
 
                 packets.push(new UpdatePlayerVelocityPacket(this.core.marina.velocity, this.ModLoader.clientLobby))
-                packets.push(new UpdatePlayerPositionPacket(this.core.marina.real_pos, this.ModLoader.clientLobby))
+                packets.push(new UpdatePlayerPositionPacket(new Vector3(this.core.marina.real_pos.x, this.core.marina.real_pos.y, this.core.marina.pos_2.z), this.ModLoader.clientLobby))
             }
         }
         else if (this.puppet_overlord.puppets.length > 0) {
@@ -173,7 +220,7 @@ class MischiefMakersClient {
     }
 
     arePuppetsSafe(): boolean {
-        return (!this.core.game.in_cutscene && !this.core.game.is_paused && this.core.game.game_state == 6)
+        return (!this.core.game.in_cutscene && !this.core.game.is_paused && this.core.game.game_state == 6 && this.core.game.stage_timer > 30)
     }
 
     makePuppet(uuid: string): number {
@@ -269,6 +316,19 @@ class MischiefMakersClient {
     onSceneChange(packet: SceneChangePacket) {
         if (packet.scene != this.last_scene) this.puppet_overlord.freePuppet(packet.player.uuid)
         else this.makePuppet(packet.player.uuid)
+    }
+
+    @NetworkHandler('mmo_sSceneU')
+    onSceneUpdate(packet: SceneUpdatePacket) {
+        if (this.arePuppetsSafe() && packet.scene == this.last_scene) {
+            let index_0
+
+            for (index_0 = 0; index_0 < packet.update_data.length; index_0++) {
+                if (!this.puppet_overlord.isIndexPuppet(packet.update_data[index_0].index)) {
+                    this.scene_actors[packet.update_data[index_0].index].setDataFromPacket(packet.update_data[index_0], this.core.marina.camera_pos_final)
+                }
+            }
+        }
     }
 }
 
