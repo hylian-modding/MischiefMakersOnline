@@ -9,11 +9,13 @@ import { Player, Actor, ACTOR_LIST_POINTER, SceneActor, SIZEOF_ACTOR, SceneActor
 import { UpdatePlayerPositionPacket, GoldGemsPacket, UnlockedLevelsPacket, BestTimesPacket, UpdatePlayerVelocityPacket, UpdatePlayerDataPacket, PingServerPacket, PlayerPingPacket, SceneChangePacket, UpdatePlayerScalePacket, SceneUpdatePacket } from './MischiefMakersPacketTypes';
 import { Save } from './Core/MischiefMakers/API/ISave';
 import { PuppetOverlord, Puppet, ACTOR_LIST_SIZE } from './MischiefMakersPuppet';
-import { Game } from './Core/MischiefMakers/API/IGame';
+import { Game, SCENE_NAMES } from './Core/MischiefMakers/API/IGame';
 import Vector3 from 'modloader64_api/math/Vector3';
 import Vector2 from './Core/MischiefMakers/Math/Vector2';
 import { Packet } from 'modloader64_api/ModLoaderDefaultImpls';
 import { throws } from 'assert';
+import { DiscordStatus } from 'modloader64_api/Discord';
+import { stat } from 'fs';
 
 const DT: number = 1 / 60
 
@@ -31,6 +33,7 @@ class MischiefMakersClient {
     last_scale_XY!: number
 
     last_scene!: number
+    last_game_state!: number
     last_frame!: number
     last_ping!: number
 
@@ -62,7 +65,8 @@ class MischiefMakersClient {
         this.last_scale_0 = new Vector2(1, 1)
         this.last_scale_1 = new Vector2(1, 1)
         this.last_scale_XY = 1
-        this.last_scene = 0
+        this.last_scene = -1
+        this.last_game_state = -1
         this.last_frame = 0
         this.last_ping = 0
 
@@ -86,11 +90,43 @@ class MischiefMakersClient {
         if (!this.core.save.best_times.equals(this.last_best_times)) packets.push(new BestTimesPacket(this.core.save.best_times, this.ModLoader.clientLobby))
         if (this.last_scene != this.core.game.current_scene) {
 
-            for (i = 1; i < 0x40; i++) {
-                this.scene_actors[i] = new SceneActor(this.ModLoader.emulator, i)
+            if (this.scene_sync) {
+                for (i = 1; i < 0x40; i++) {
+                    this.scene_actors[i] = new SceneActor(this.ModLoader.emulator, i)
+                }
             }
 
             packets.push(new SceneChangePacket(this.last_scene, this.ModLoader.clientLobby))
+        }
+
+        if (this.last_scene != this.core.game.current_scene || this.last_game_state != this.core.game.game_state) {
+            let scene_identifier
+            let gm = this.core.game.game_state
+
+            if (gm == 0) scene_identifier = "Booting the Game"
+            else if (gm == 1) scene_identifier = "Watching the Logos"
+            else if (gm == 2) scene_identifier = "Title Screen"
+            else if (gm == 3) scene_identifier = "Probably Cheating 🤔"
+            else if (gm == 4) scene_identifier = "Definitley Cheating 🤔"
+            else if (gm == 5) scene_identifier = "Loading " + SCENE_NAMES[this.core.game.current_scene]
+            else if (gm == 6 && this.core.game.in_cutscene || (this.core.game.current_scene == 0x0059 || this.core.game.current_scene == 0x005F || this.core.game.current_scene == 0x0060 || this.core.game.current_scene == 0x0065)) {
+                scene_identifier = SCENE_NAMES[this.core.game.current_scene]
+            }
+            else if (gm == 7) scene_identifier = "Staring at Death Screen"
+            else if (gm == 8 || gm == 9) scene_identifier = "Crashed the Game lol"
+            else if (gm == 10) scene_identifier = "DEMO: " + SCENE_NAMES[this.core.game.current_scene]
+            else if (gm == 11) scene_identifier = "Selecting File"
+            else if (gm == 12) scene_identifier = SCENE_NAMES[0x0065] + ", HP: " + this.core.marina.health
+            else if (gm == 14) scene_identifier = "Looking at Best Times"
+
+            if (scene_identifier == null) scene_identifier = "Cutscene or Unknown Scene"
+
+            let status = new DiscordStatus("Mischief Makers Online", scene_identifier)
+            status.partyId = this.ModLoader.clientLobby
+            status.partyMax = 64
+            status.partySize = this.puppet_overlord.puppets.length
+            status.smallImageKey = "mischief"
+            this.ModLoader.gui.setDiscordStatus(status)
         }
 
         if (this.arePuppetsSafe() && this.core.game.stage_timer > 30) {
@@ -216,6 +252,7 @@ class MischiefMakersClient {
         this.last_scale_1 = this.core.marina.scale_1
         this.last_scale_XY = this.core.marina.scaleXY
         this.last_scene = this.core.game.current_scene
+        this.last_game_state = this.core.game.game_state
         this.last_frame = frame
     }
 
