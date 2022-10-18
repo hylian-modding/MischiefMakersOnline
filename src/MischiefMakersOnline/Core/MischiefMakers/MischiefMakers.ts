@@ -11,6 +11,9 @@ export interface IMischiefMakersCore extends ICore {
 
 export class MischiefMakers implements IMischiefMakersCore {
     constructor() {}
+    
+    heap_start: number = 0x80800000;
+    heap_size: number = 0x83E00000 - 0x80800000;
 
     header!: any
 

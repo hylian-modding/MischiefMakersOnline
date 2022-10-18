@@ -1,9 +1,10 @@
 {
   "name": "MischiefMakersOnline",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "MischiefMakersOnline.js",
   "core": "*",
+  "updateUrl": "http://repo.modloader64.com/mods/Mischief/update/update.json",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
